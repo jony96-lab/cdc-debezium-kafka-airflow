@@ -70,7 +70,7 @@ def cdc_connector_health_monitor_dag():
     # --- Tarea 3: Enviar correo de alerta (Gmail SMTP) ---
     send_failure_email_alert = EmailOperator(
         task_id="send_failure_email_alert_gmail",
-        to=["jmaccari96@gmail.com"],
+        to=["@gmail.com"],
         subject="🚨 ALERTA AIRFLOW: Falla en Conector CDC ({{ ds }})",
         html_content="""
             <h3>Falla Crítica en el Monitoreo de Conectores CDC</h3>
