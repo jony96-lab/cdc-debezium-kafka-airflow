@@ -64,7 +64,7 @@ def integrity_check_dag():
     # Notificación de error
     notify_error = EmailOperator(
         task_id="notify_integrity_error",
-        to="jmaccari96@gmail.com",
+        to="@gmail.com",
         conn_id=SMTP_CONN_ID,
         subject="🚨 ALERTA DE INTEGRIDAD: Falla en replicación CDC",
         html_content="""
