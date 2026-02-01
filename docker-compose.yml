@@ -1,0 +1,251 @@
+version: '3.8'
+
+x-airflow-common:
+  &airflow-common
+  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.1.1}
+  env_file:
+    - ${ENV_FILE_PATH:-.env}
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    # Uso de variables del .env para la base de datos
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    
+    # --- LIMITES DE RECURSOS ---
+    AIRFLOW__CORE__PARALLELISM: '2'
+    AIRFLOW__CORE__DAG_CONCURRENCY: '2'
+    AIRFLOW__CELERY__WORKER_CONCURRENCY: '2'
+
+    # --- CONFIGURACIÓN DE AUTH Y API (Airflow 3) ---
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-webserver:8080/execution/'
+    
+    # --- SEGURIDAD ---
+    AIRFLOW__SECRET_KEY: 'clave_secreta_super_segura_para_el_cluster_docker'
+    AIRFLOW__API_AUTH__JWT_SECRET: 'secreto_jwt_compartido_entre_todos_los_contenedores'
+    
+    # --- LIBRERÍAS ---
+    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-kafka-python apache-airflow-providers-mysql apache-airflow-providers-postgres apache-airflow-providers-fab apache-airflow-providers-http apache-airflow-providers-smtp}
+
+    # --- VARIABLES Y CONEXIONES PERSISTENTES ---
+    AIRFLOW_VAR_CDC_CONNECTORS_LIST: '["mysql-connector", "postgres-sink-connector"]'
+    AIRFLOW_CONN_MYSQL_CDC_SOURCE: 'mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@host.docker.internal:3306/pos_bi_db'
+    AIRFLOW_CONN_POSTGRES_CDC_SINK: 'postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:5433/data_warehouse'
+    AIRFLOW_CONN_KAFKA_CONNECT_API: 'http://connect:8083'
+
+    # --- CONFIG SMTP PARA GMAIL (Usando variables del .env) ---
+    AIRFLOW__SMTP__SMTP_HOST: smtp.gmail.com
+    AIRFLOW__SMTP__SMTP_PORT: 587
+    AIRFLOW__SMTP__SMTP_USER: ${SMTP_USER}
+    AIRFLOW__SMTP__SMTP_PASSWORD: ${SMTP_PASSWORD}
+    AIRFLOW__SMTP__SMTP_MAIL_FROM: ${SMTP_USER}
+    AIRFLOW__SMTP__SMTP_STARTTLS: "True"
+    AIRFLOW__SMTP__SMTP_SSL: "False"
+
+  volumes:
+    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
+    - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
+    - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
+    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    &airflow-common-depends-on
+    redis:
+      condition: service_healthy
+    postgres:
+      condition: service_healthy
+
+services:
+  # --- INFRAESTRUCTURA DE DATOS ---
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    hostname: kafka
+    container_name: kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    restart: always
+
+  connect:
+    image: debezium/connect:2.5
+    container_name: connect
+    depends_on:
+      - kafka
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "true"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "true"
+    volumes:
+      - ./jdbc-drivers:/kafka/connect/jdbc-drivers
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8082:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local-kraft
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    restart: always
+
+  # --- SERVICIOS CORE AIRFLOW ---
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
+      interval: 10s
+      retries: 5
+    restart: always
+
+  redis:
+    image: redis:7.2-bookworm
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
+    restart: always
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: api-server
+    container_name: airflow-webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 120s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 120s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-worker:
+    <<: *airflow-common
+    command: celery worker
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 120s
+    environment:
+      <<: *airflow-common-env
+      DUMB_INIT_SETSID: "0"
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-init:
+    <<: *airflow-common
+    container_name: airflow-init
+    entrypoint: /bin/bash
+    environment:
+      <<: *airflow-common-env
+      _PIP_ADDITIONAL_REQUIREMENTS: ''
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+    command:
+      - -c
+      - |
+        mkdir -p /sources/logs /sources/dags /sources/plugins
+        exec /entrypoint airflow version
+    user: "0:0"
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}:/sources
+
+volumes:
+  postgres-db-volume:
+  kafka-data:

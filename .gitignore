@@ -1,0 +1,22 @@
+# Secretos y credenciales (LO MÁS IMPORTANTE)
+.env
+
+# Entornos virtuales de Python
+venv/
+.venv/
+env/
+
+# Archivos temporales de Airflow y Docker
+logs/
+plugins/
+kafka-data/
+postgres-db-volume/
+config/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db

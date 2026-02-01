@@ -1,0 +1,19 @@
+{
+  "name": "dlq-hospital-sink",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+    "tasks.max": "1",
+    "topics": "DLQ_postgres_sink",
+    "connection.url": "jdbc:postgresql://host.docker.internal:5433/data_warehouse",
+    "connection.user": "postgres",
+    "connection.password": "admin",
+    "table.name.format": "kafka_dlq_hospital",
+    "insert.mode": "insert",
+    "pk.mode": "none",
+    "value.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "transforms": "hoistField",
+    "transforms.hoistField.type": "org.apache.kafka.connect.transforms.HoistField$Value",
+    "transforms.hoistField.field": "payload_json"
+  }
+}

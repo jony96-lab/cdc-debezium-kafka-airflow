@@ -1,0 +1,29 @@
+{
+  "name": "postgres-sink-connector",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+    "tasks.max": "1",
+    "batch.size": "3000",
+    "linger.ms": "500",
+    "max.buffered.records": "20000",
+    "topics": "mysql-server.pos_bi_db.categorias,mysql-server.pos_bi_db.entidades,mysql-server.pos_bi_db.productos,mysql-server.pos_bi_db.ventas,mysql-server.pos_bi_db.detalle_ventas,mysql-server.pos_bi_db.compras,mysql-server.pos_bi_db.detalle_compras,mysql-server.pos_bi_db.cierres_caja,mysql-server.pos_bi_db.pagos_clientes",
+    "connection.url": "jdbc:postgresql://host.docker.internal:5433/data_warehouse",
+    "connection.user": "postgres",
+    "connection.password": "admin",
+    "auto.create": "false",
+    "auto.evolve": "true",
+    "insert.mode": "upsert",
+    "delete.enabled": "true",
+    "pk.mode": "record_key",
+    "errors.tolerance": "all",
+    "errors.deadletterqueue.topic.name": "DLQ_postgres_sink",
+    "errors.deadletterqueue.topic.replication.factor": 1,
+    "errors.log.enable": "true",
+    "transforms": "unwrap,route",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": "false",
+    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.route.regex": "mysql-server\\.pos_bi_db\\.(.*)",
+    "transforms.route.replacement": "$1"
+  }
+}
