@@ -7,7 +7,7 @@
     "connection.url": "jdbc:postgresql://host.docker.internal:5433/data_warehouse",
     "connection.user": "postgres",
     "connection.password": "postgres",
-    "table.name.format": "kafka_dlq_hospital",
+    "table.name.format": "kafka_dlq",
     "insert.mode": "insert",
     "pk.mode": "none",
     "value.converter": "org.apache.kafka.connect.storage.StringConverter",
