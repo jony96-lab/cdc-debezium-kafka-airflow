@@ -64,7 +64,7 @@ def health_check_dag():
 
     alert_email = EmailOperator(
         task_id="send_alert",
-        to="jmaccari96@gmail.com",
+        to="@gmail.com",
         conn_id="smtp_default",
         subject="🚨 CRITICAL: Conector de Kafka Caído",
         html_content="""
