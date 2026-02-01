@@ -4,7 +4,7 @@
     "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
     "tasks.max": "1",
     "topics": "DLQ_postgres_sink",
-    "connection.url": "jdbc:postgresql://host.docker.internal:5433/data_warehouse",
+    "connection.url": "jdbc:postgresql://host.docker.internal:5433/warehouse",
     "connection.user": "postgres",
     "connection.password": "postgres",
     "table.name.format": "kafka_dlq",
