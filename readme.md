@@ -1,3 +1,15 @@
+## 🏗️ Arquitectura del Proyecto
+<p align="center">
+  <img src="img/arquitectura.png" width="800" title="Arquitectura CDC">
+</p>
+
+## 📈 Monitoreo y Observabilidad
+<p align="center">
+  <img src="img/airflow-dags.png" width="800" title="Airflow Dashboard">
+</p>
+
+
+
 Real-Time CDC Pipeline
 Este proyecto implementa una arquitectura de Change Data Capture (CDC) de nivel industrial para replicar datos en tiempo real desde un sistema transaccional (MySQL) hacia un Data Warehouse (Postgres), garantizando la integridad y salud del pipeline mediante Apache Airflow 3.1.1.
 
