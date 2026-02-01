@@ -6,7 +6,7 @@
     "topics": "DLQ_postgres_sink",
     "connection.url": "jdbc:postgresql://host.docker.internal:5433/data_warehouse",
     "connection.user": "postgres",
-    "connection.password": "admin",
+    "connection.password": "postgres",
     "table.name.format": "kafka_dlq_hospital",
     "insert.mode": "insert",
     "pk.mode": "none",
